@@ -1,0 +1,197 @@
+! =================================================================
+! SWITCH SW3 - Bureau 3
+! Uplink Fa0/1 -> Switch SW2 (Fa0/9)
+! Port Fa0/9 non utilise (extension future)
+! =================================================================
+!
+! NOTE SUR LE NOM DES INTERFACES
+! Le "Switch-PT" de Packet Tracer est modulaire : selon les modules
+! installes, les ports peuvent s'appeler FastEthernet0/1,
+! FastEthernet1/1, GigabitEthernet... Verifier avec :
+!     show ip interface brief
+! et adapter les numeros ci-dessous si necessaire.
+! Le port 9 correspond a l'uplink fibre : il faut y installer un
+! module PT-SWITCH-NM-1FFE (fibre) et le meme cote SW2.
+!
+! =================================================================
+
+enable
+configure terminal
+
+hostname SW3
+
+no ip domain-lookup
+service password-encryption
+enable secret Cy8er_MSc_2026!
+
+banner motd #
+  ATTENTION - Acces reserve aux personnels autorises.
+#
+
+line console 0
+ password Cons0le_2026!
+ login
+ logging synchronous
+ exec-timeout 10 0
+ exit
+
+! -----------------------------------------------------------------
+! Creation des VLAN
+! -----------------------------------------------------------------
+vlan 10
+ name WIFI
+ exit
+vlan 20
+ name PC-FIXES
+ exit
+vlan 30
+ name ADMINISTRATION
+ exit
+! VLAN 1 existe par defaut et porte la VoIP (impose par l'enonce)
+
+! -----------------------------------------------------------------
+! AFFECTATION DES PORTS (conforme au tableau de l'enonce)
+!
+!   Port 8    -> VLAN 30  Administration
+!   Ports 6-7 -> VLAN 20  PC fixes
+!   Ports 4-5 -> VLAN 10  Points d acces Wi-Fi
+!   Ports 2-3 -> VLAN 1   Telephones IP (VoIP)
+!   Ports 1,9 -> TRUNK    Uplinks
+! -----------------------------------------------------------------
+
+! --- VoIP : ports 2 et 3 ---
+interface range FastEthernet0/2-3
+ description Telephones IP (VoIP)
+ switchport mode access
+ switchport access vlan 1
+ spanning-tree portfast
+ no shutdown
+ exit
+
+! --- Points d acces Wi-Fi : ports 4 et 5 ---
+interface range FastEthernet0/4-5
+ description Points d acces Wi-Fi
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ no shutdown
+ exit
+
+! --- PC fixes : ports 6 et 7 ---
+interface range FastEthernet0/6-7
+ description PC fixes
+ switchport mode access
+ switchport access vlan 20
+ spanning-tree portfast
+ no shutdown
+ exit
+
+! --- Administration : port 8 ---
+interface FastEthernet0/8
+ description Poste d administration
+ switchport mode access
+ switchport access vlan 30
+ spanning-tree portfast
+ no shutdown
+ exit
+
+! -----------------------------------------------------------------
+! TRUNKS (ports 1 et 9)
+! VLAN 1 reste le VLAN natif, conformement a l'enonce qui y place
+! la VoIP.
+! -----------------------------------------------------------------
+interface FastEthernet0/1
+ description === TRUNK vers SW2 (Fa0/9) ===
+ switchport mode trunk
+ switchport trunk native vlan 1
+ switchport trunk allowed vlan 1,10,20,30
+ no shutdown
+ exit
+
+interface FastEthernet0/9
+ description === TRUNK libre - extension future ===
+ switchport mode trunk
+ switchport trunk native vlan 1
+ switchport trunk allowed vlan 1,10,20,30
+ no shutdown
+ exit
+
+! -----------------------------------------------------------------
+! Interface d administration (VLAN 30)
+! -----------------------------------------------------------------
+interface Vlan30
+ description Administration du switch
+ ip address 192.168.30.4 255.255.255.0
+ no shutdown
+ exit
+
+ip default-gateway 192.168.30.1
+
+
+! -----------------------------------------------------------------
+! ADMINISTRATION DISTANTE PAR SSH
+!
+! ATTENTION : la commande "crypto key generate rsa" est INTERACTIVE.
+! Coller le bloc jusqu'a cette commande, repondre aux invites, puis
+! coller la suite :
+!   - si l'equipement a deja des cles : "Do you really want to
+!     replace them? [yes/no]" -> repondre yes
+!   - "How many bits in the modulus [512]" -> repondre 2048
+! -----------------------------------------------------------------
+ip domain-name minilab.local
+
+! Compte nominatif : "login local" le rendra imputable, la ou un
+! mot de passe de ligne est partage par tous les administrateurs.
+! privilege 15 donne le mode enable des l'authentification.
+username admin privilege 15 secret Adm1n_MSc_2026!
+
+crypto key generate rsa
+! -> repondre 2048 (et yes au prealable si des cles existent deja)
+
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 2
+
+! ACL restreignant l'administration au VLAN 30. Une seule regle
+! permit suffit : le "deny any" implicite de fin d'ACL bloque le
+! reste. Le refus intervient avant toute demande d'identifiant.
+ip access-list standard SSH-ADMIN
+ remark Administration autorisee depuis le VLAN 30 uniquement
+ permit 192.168.30.0 0.0.0.255
+ exit
+
+! Les 16 lignes vty doivent etre traitees, pas seulement 0-4 :
+! laisser vty 5-15 en configuration d'usine reviendrait a garder
+! des points d'entree non filtres.
+line vty 0 4
+ access-class SSH-ADMIN in
+ transport input ssh
+ login local
+ exec-timeout 10 0
+ logging synchronous
+ exit
+
+line vty 5 15
+ access-class SSH-ADMIN in
+ transport input ssh
+ login local
+ exec-timeout 10 0
+ logging synchronous
+ exit
+
+! -----------------------------------------------------------------
+! DURCISSEMENT COMPLEMENTAIRE
+! Desactivation explicite des ports non utilises : un port actif
+! non affecte est un point d entree pour un intrus qui se branche
+! physiquement dans les locaux.
+! Adapter la plage selon le nombre reel de ports du switch.
+! -----------------------------------------------------------------
+! interface range FastEthernet0/10-24
+!  description PORT NON UTILISE
+!  switchport mode access
+!  switchport access vlan 999
+!  shutdown
+!  exit
+
+end
+copy running-config startup-config

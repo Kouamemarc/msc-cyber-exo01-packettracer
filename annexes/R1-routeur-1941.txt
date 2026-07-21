@@ -1,0 +1,206 @@
+! =================================================================
+! ROUTEUR CISCO 1941 - R1
+! Role : passerelle Internet, serveur DHCP, routage inter-VLAN
+! Test d'admission MSc Cyber - La Plateforme
+! =================================================================
+
+enable
+configure terminal
+
+hostname R1
+
+! -----------------------------------------------------------------
+! Securite d'acces (bonnes pratiques de durcissement)
+! -----------------------------------------------------------------
+no ip domain-lookup
+service password-encryption
+enable secret Cy8er_MSc_2026!
+
+banner motd #
+  ATTENTION - Acces reserve aux personnels autorises.
+  Toute connexion est journalisee.
+#
+
+line console 0
+ password Cons0le_2026!
+ login
+ logging synchronous
+ exec-timeout 10 0
+ exit
+
+! -----------------------------------------------------------------
+! Plages exclues du DHCP
+! L'enonce impose des pools de .10 a .50 : on exclut donc
+! explicitement .1 a .9 (passerelles, equipements fixes) et
+! .51 a .254 (reserve pour adressage statique).
+! -----------------------------------------------------------------
+ip dhcp excluded-address 192.168.0.1 192.168.0.9
+ip dhcp excluded-address 192.168.0.51 192.168.0.254
+ip dhcp excluded-address 192.168.10.1 192.168.10.9
+ip dhcp excluded-address 192.168.10.51 192.168.10.254
+ip dhcp excluded-address 192.168.20.1 192.168.20.9
+ip dhcp excluded-address 192.168.20.51 192.168.20.254
+ip dhcp excluded-address 192.168.30.1 192.168.30.9
+ip dhcp excluded-address 192.168.30.51 192.168.30.254
+
+! -----------------------------------------------------------------
+! Pools DHCP (un par VLAN)
+! -----------------------------------------------------------------
+ip dhcp pool VLAN1-VOIP
+ network 192.168.0.0 255.255.255.0
+ default-router 192.168.0.1
+ dns-server 8.8.8.8
+ exit
+
+ip dhcp pool VLAN10-WIFI
+ network 192.168.10.0 255.255.255.0
+ default-router 192.168.10.1
+ dns-server 8.8.8.8
+ exit
+
+ip dhcp pool VLAN20-PCFIXES
+ network 192.168.20.0 255.255.255.0
+ default-router 192.168.20.1
+ dns-server 8.8.8.8
+ exit
+
+ip dhcp pool VLAN30-ADMIN
+ network 192.168.30.0 255.255.255.0
+ default-router 192.168.30.1
+ dns-server 8.8.8.8
+ exit
+
+! -----------------------------------------------------------------
+! ROUTAGE INTER-VLAN : "router on a stick"
+! Le 1941 ne dispose que de 2 ports Gigabit. On utilise donc
+! une seule interface physique vers le reseau (GE0/0), decoupee
+! en sous-interfaces 802.1Q, une par VLAN.
+! -----------------------------------------------------------------
+interface GigabitEthernet0/0
+ description === TRUNK vers SW2 (GigabitEthernet0/1) ===
+ no ip address
+ no shutdown
+ exit
+
+! VLAN 1 = VoIP. C'est le VLAN natif du trunk : son trafic circule
+! non tague, d'ou le mot-cle "native".
+interface GigabitEthernet0/0.1
+ description VLAN 1 - VoIP
+ encapsulation dot1Q 1 native
+ ip address 192.168.0.1 255.255.255.0
+ exit
+
+interface GigabitEthernet0/0.10
+ description VLAN 10 - Points d acces Wi-Fi
+ encapsulation dot1Q 10
+ ip address 192.168.10.1 255.255.255.0
+ exit
+
+interface GigabitEthernet0/0.20
+ description VLAN 20 - PC fixes
+ encapsulation dot1Q 20
+ ip address 192.168.20.1 255.255.255.0
+ exit
+
+interface GigabitEthernet0/0.30
+ description VLAN 30 - Administration
+ encapsulation dot1Q 30
+ ip address 192.168.30.1 255.255.255.0
+ exit
+
+! -----------------------------------------------------------------
+! Interface WAN vers Internet
+! Adressage a adapter selon le FAI simule dans Packet Tracer.
+! -----------------------------------------------------------------
+interface GigabitEthernet0/1
+ description === WAN - Sortie Internet ===
+ ip address 203.0.113.2 255.255.255.252
+ ip nat outside
+ no shutdown
+ exit
+
+! -----------------------------------------------------------------
+! NAT overload (PAT) : les 4 reseaux prives sortent sur Internet
+! derriere l'unique adresse publique de GE0/1.
+! -----------------------------------------------------------------
+interface GigabitEthernet0/0.1
+ ip nat inside
+ exit
+interface GigabitEthernet0/0.10
+ ip nat inside
+ exit
+interface GigabitEthernet0/0.20
+ ip nat inside
+ exit
+interface GigabitEthernet0/0.30
+ ip nat inside
+ exit
+
+ip access-list standard NAT-LAN
+ permit 192.168.0.0 0.0.0.255
+ permit 192.168.10.0 0.0.0.255
+ permit 192.168.20.0 0.0.0.255
+ permit 192.168.30.0 0.0.0.255
+ exit
+
+ip nat inside source list NAT-LAN interface GigabitEthernet0/1 overload
+
+! Route par defaut vers le FAI
+ip route 0.0.0.0 0.0.0.0 203.0.113.1
+
+! -----------------------------------------------------------------
+! ADMINISTRATION DISTANTE PAR SSH
+!
+! ATTENTION : la commande "crypto key generate rsa" est INTERACTIVE.
+! Coller le bloc jusqu'a cette commande, repondre aux invites, puis
+! coller la suite :
+!   - si l'equipement a deja des cles : "Do you really want to
+!     replace them? [yes/no]" -> repondre yes
+!   - "How many bits in the modulus [512]" -> repondre 2048
+! -----------------------------------------------------------------
+ip domain-name minilab.local
+
+! Compte nominatif : "login local" le rendra imputable, la ou un
+! mot de passe de ligne est partage par tous les administrateurs.
+! privilege 15 donne le mode enable des l'authentification.
+username admin privilege 15 secret Adm1n_MSc_2026!
+
+crypto key generate rsa
+! -> repondre 2048 (et yes au prealable si des cles existent deja)
+
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 2
+
+! ACL restreignant l'administration au VLAN 30. Une seule regle
+! permit suffit : le "deny any" implicite de fin d'ACL bloque le
+! reste. Le refus intervient avant toute demande d'identifiant.
+ip access-list standard SSH-ADMIN
+ remark Administration autorisee depuis le VLAN 30 uniquement
+ permit 192.168.30.0 0.0.0.255
+ exit
+
+! Les 16 lignes vty doivent etre traitees, pas seulement 0-4 :
+! laisser vty 5-15 en configuration d'usine reviendrait a garder
+! des points d'entree non filtres.
+line vty 0 4
+ access-class SSH-ADMIN in
+ transport input ssh
+ login local
+ exec-timeout 10 0
+ logging synchronous
+ exit
+
+line vty 5 15
+ access-class SSH-ADMIN in
+ transport input ssh
+ login local
+ exec-timeout 10 0
+ logging synchronous
+ exit
+
+! -----------------------------------------------------------------
+! Sauvegarde
+! -----------------------------------------------------------------
+end
+copy running-config startup-config
