@@ -9,11 +9,11 @@ Password:
 
 R1>en
 Password: 
-	
-R1#show running-config
+R1#sh r
+R1#sh running-config 
 Building configuration...
 
-Current configuration : 2684 bytes
+Current configuration : 3149 bytes
 !
 version 15.1
 no service timestamps log datetime msec
@@ -60,6 +60,8 @@ no ipv6 cef
 !
 !
 !
+username admin privilege 15 secret 5 $1$mERr$c0HWY5h0/6O3lgBV01nbr1
+!
 !
 license udi pid CISCO1941/K9 sn FTX1524CZC5-
 !
@@ -73,7 +75,11 @@ license udi pid CISCO1941/K9 sn FTX1524CZC5-
 !
 !
 !
+ip ssh version 2
+ip ssh authentication-retries 2
+ip ssh time-out 60
 no ip domain-lookup
+ip domain-name minilab.local
 !
 !
 spanning-tree mode pvst
@@ -136,6 +142,9 @@ ip access-list standard NAT-LAN
  permit 192.168.10.0 0.0.0.255
  permit 192.168.20.0 0.0.0.255
  permit 192.168.30.0 0.0.0.255
+ip access-list standard SSH-ADMIN
+ remark Administration autorisee depuis le VLAN 30 uniquement
+ permit 192.168.30.0 0.0.0.255
 !
 banner motd ^C
   ATTENTION - Acces reserve aux personnels autorises.
@@ -153,7 +162,15 @@ line con 0
 line aux 0
 !
 line vty 0 4
- login
+ access-class SSH-ADMIN in
+ logging synchronous
+ login local
+ transport input ssh
+line vty 5 15
+ access-class SSH-ADMIN in
+ logging synchronous
+ login local
+ transport input ssh
 !
 !
 !

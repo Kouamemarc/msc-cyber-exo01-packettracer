@@ -1,0 +1,167 @@
+
+  ATTENTION - Acces reserve aux personnels autorises.
+
+
+User Access Verification
+
+Password: 
+
+SW1>en
+Password: 
+SW1#sh r
+SW1#sh running-config 
+Building configuration...
+
+Current configuration : 2765 bytes
+!
+version 15.0
+no service timestamps log datetime msec
+no service timestamps debug datetime msec
+service password-encryption
+!
+hostname SW1
+!
+enable secret 5 $1$mERr$iQz78mfxCADfVqMbDPT9S/
+!
+!
+!
+ip ssh version 2
+ip ssh authentication-retries 2
+ip ssh time-out 60
+no ip domain-lookup
+ip domain-name minilab.local
+!
+username admin secret 5 $1$mERr$c0HWY5h0/6O3lgBV01nbr1
+!
+!
+!
+spanning-tree mode pvst
+spanning-tree extend system-id
+!
+interface FastEthernet0/1
+ description === Reserve (non utilise sur SW1) ===
+ switchport trunk allowed vlan 1,10,20,30
+ switchport mode trunk
+ shutdown
+!
+interface FastEthernet0/2
+ description Telephones IP (VoIP)
+ switchport mode access
+ spanning-tree portfast
+!
+interface FastEthernet0/3
+ description Telephones IP (VoIP)
+ switchport mode access
+ spanning-tree portfast
+!
+interface FastEthernet0/4
+ description Points d acces Wi-Fi
+ switchport access vlan 10
+ switchport mode access
+ spanning-tree portfast
+!
+interface FastEthernet0/5
+ description Points d acces Wi-Fi
+ switchport access vlan 10
+ switchport mode access
+ spanning-tree portfast
+!
+interface FastEthernet0/6
+ description PC fixes
+ switchport access vlan 20
+ switchport mode access
+ spanning-tree portfast
+!
+interface FastEthernet0/7
+ description PC fixes
+ switchport access vlan 20
+ switchport mode access
+ spanning-tree portfast
+!
+interface FastEthernet0/8
+ description Poste d administration
+ switchport access vlan 30
+ switchport mode access
+ spanning-tree portfast
+!
+interface FastEthernet0/9
+ description === TRUNK vers SW2 (Fa0/1) ===
+ switchport trunk allowed vlan 1,10,20,30
+ switchport mode trunk
+!
+interface FastEthernet0/10
+!
+interface FastEthernet0/11
+!
+interface FastEthernet0/12
+!
+interface FastEthernet0/13
+!
+interface FastEthernet0/14
+!
+interface FastEthernet0/15
+!
+interface FastEthernet0/16
+!
+interface FastEthernet0/17
+!
+interface FastEthernet0/18
+!
+interface FastEthernet0/19
+!
+interface FastEthernet0/20
+!
+interface FastEthernet0/21
+!
+interface FastEthernet0/22
+!
+interface FastEthernet0/23
+!
+interface FastEthernet0/24
+!
+interface GigabitEthernet0/1
+!
+interface GigabitEthernet0/2
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+interface Vlan30
+ description Administration du switch
+ ip address 192.168.30.2 255.255.255.0
+!
+ip default-gateway 192.168.30.1
+!
+banner motd ^C
+  ATTENTION - Acces reserve aux personnels autorises.
+^C
+!
+!
+!
+ip access-list standard SSH-ADMIN
+ remark Administration autorisee depuis le VLAN 30 uniquement
+ permit 192.168.30.0 0.0.0.255
+line con 0
+ password 7 080243401A4909122D595C567C6A
+ logging synchronous
+ login
+!
+line vty 0 4
+ access-class SSH-ADMIN in
+ logging synchronous
+ login local
+ transport input ssh
+line vty 5 15
+ access-class SSH-ADMIN in
+ logging synchronous
+ login local
+ transport input ssh
+!
+!
+!
+!
+end
+
+
+SW1#
